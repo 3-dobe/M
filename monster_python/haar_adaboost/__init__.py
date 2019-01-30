@@ -1,0 +1,1 @@
+from haar_adaboost.haar import Haar
