@@ -1,6 +1,7 @@
 import json
 import threading
 from enum import Enum
+from multiprocessing import Queue, Process
 
 import numpy as np
 import os
@@ -218,9 +219,9 @@ def __classify_true(sample, w_classifier):
             return sample.features[w_classifier.feature_index] <= w_classifier.feature_sep
 
 
-def __thread_entry_weak_classify(haars, f_start, feature_counts, feature_counts_thread, result):
+def __process_entry_weak_classify(haars, f_start, feature_counts, feature_counts_process, queue):
     min_err_weak_classifier = None
-    for i in range(f_start, f_start + feature_counts_thread):
+    for i in range(f_start, f_start + feature_counts_process):
         if i >= feature_counts:
             break
         # find weak classifier for each feature
@@ -232,10 +233,10 @@ def __thread_entry_weak_classify(haars, f_start, feature_counts, feature_counts_
         print("__thread_entry_weak_classify: thread=" + str(threading.current_thread()) +
               ", i=" + str(i) +
               ", f_start=" + str(f_start) +
-              " ~ f_start+feature_counts_thread=" + str(f_start + feature_counts_thread))
-    print(
-        "__thread_entry_weak_classify: thread" + str(threading.current_thread()) + ", " + str(min_err_weak_classifier))
-    result[0] = min_err_weak_classifier
+              " ~ f_start+feature_counts_thread=" + str(f_start + feature_counts_process))
+    print("__thread_entry_weak_classify: thread" + str(threading.current_thread()) +
+          ", " + str(min_err_weak_classifier))
+    queue.put(min_err_weak_classifier)
 
 
 def __train_entry(haars, loop_t=1, thread_count=1):
@@ -250,21 +251,19 @@ def __train_entry(haars, loop_t=1, thread_count=1):
             # find the best weak classifier
             min_err_weak_classifier = None
             # every feature
-            feature_counts_thread = np.math.ceil(feature_counts / thread_count)
-            threads = []
-            results_from_threads = []
+            feature_counts_process = np.math.ceil(feature_counts / thread_count)
+            processes = []
             # for i in range(0, feature_counts, 16000):
-            for i in range(0, feature_counts, feature_counts_thread):
-                result = [None]
-                t = threading.Thread(target=__thread_entry_weak_classify,
-                                     args=(haars, i, feature_counts, feature_counts_thread, result))
-                threads.append(t)
-                results_from_threads.append(result)
-                t.start()
-            for i in range(len(threads)):
-                threads[i].join()
+            result_q = Queue()
+            for i in range(0, feature_counts, feature_counts_process):
+                p = Process(target=__process_entry_weak_classify,
+                            args=(haars, i, feature_counts, feature_counts_process, result_q))
+                processes.append(p)
+                p.start()
+            for i in range(len(processes)):
+                processes[i].join()
                 print("train_entry: thread " + str(i) + " join")
-            for res in results_from_threads:
+                res = result_q.get_nowait()
                 if min_err_weak_classifier is None or res[0].err <= min_err_weak_classifier.err:
                     min_err_weak_classifier = res[0]
             print("train_entry: Loop t=" + str(t) + ", best_weak_classifier found, " + str(min_err_weak_classifier))
