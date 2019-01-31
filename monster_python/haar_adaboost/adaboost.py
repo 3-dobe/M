@@ -1,5 +1,4 @@
 import json
-import threading
 from enum import Enum
 from multiprocessing import Queue, Process
 
@@ -221,6 +220,9 @@ def __classify_true(sample, w_classifier):
 
 def __process_entry_weak_classify(haars, f_start, feature_counts, feature_counts_process, queue):
     min_err_weak_classifier = None
+    print("__thread_entry_weak_classify: FINDING " + str(min_err_weak_classifier) +
+          ", " + str(f_start) + "~" + str(f_start + feature_counts_process) +
+          ", feature_counts_process=" + str(feature_counts_process))
     for i in range(f_start, f_start + feature_counts_process):
         if i >= feature_counts:
             break
@@ -230,12 +232,11 @@ def __process_entry_weak_classify(haars, f_start, feature_counts, feature_counts
         (feature_sep, symbol, err) = __find_weak_classifier(samples_f)
         if min_err_weak_classifier is None or err <= min_err_weak_classifier.err:
             min_err_weak_classifier = WeakClassifier(i, feature_sep, symbol, err)
-        print("__thread_entry_weak_classify: thread=" + str(threading.current_thread()) +
-              ", i=" + str(i) +
-              ", f_start=" + str(f_start) +
-              " ~ f_start+feature_counts_thread=" + str(f_start + feature_counts_process))
-    print("__thread_entry_weak_classify: thread" + str(threading.current_thread()) +
-          ", " + str(min_err_weak_classifier))
+        # print("__thread_entry_weak_classify: i=" + str(i) +
+        #       ", " + str(f_start) + " ~ " + str(f_start + feature_counts_process))
+    print("__thread_entry_weak_classify: FOUND RESULT " + str(min_err_weak_classifier) +
+          ", " + str(f_start) + "~" + str(f_start + feature_counts_process) +
+          ", feature_counts_process=" + str(feature_counts_process))
     queue.put(min_err_weak_classifier)
 
 
@@ -262,10 +263,10 @@ def __train_entry(haars, loop_t=1, thread_count=1):
                 p.start()
             for i in range(len(processes)):
                 processes[i].join()
-                print("train_entry: thread " + str(i) + " join")
+                print("train_entry: process index " + str(i) + " join")
                 res = result_q.get_nowait()
-                if min_err_weak_classifier is None or res[0].err <= min_err_weak_classifier.err:
-                    min_err_weak_classifier = res[0]
+                if min_err_weak_classifier is None or res.err <= min_err_weak_classifier.err:
+                    min_err_weak_classifier = res
             print("train_entry: Loop t=" + str(t) + ", best_weak_classifier found, " + str(min_err_weak_classifier))
             best_weak_classifier.append(min_err_weak_classifier)
             # update alpha
@@ -298,5 +299,5 @@ if __name__ == '__main__':
     print("__main__: init data end")
     # train
     print("__main__: train begin")
-    __train_entry(haars, 200, 8)
+    __train_entry(haars, 200, 4)
     print("__main__: train end")
