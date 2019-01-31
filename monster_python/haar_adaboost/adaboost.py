@@ -1,4 +1,5 @@
 import json
+import threading
 from enum import Enum
 
 import numpy as np
@@ -7,7 +8,10 @@ import re
 
 from PIL import Image
 
+from dataset import normalize
 from haar_adaboost import Haar
+
+ROOT_DIR = "E:/workspace/chaopei/M/monster_python/"
 
 
 class Symbol(Enum):
@@ -113,25 +117,18 @@ def __get_cache_obj(cache_path, decoder):
             cache.close()
 
 
-def __haar_index(f):
-    """['norm', 'p', '1', 'png]
-
-    """
-    return re.split("[_.]", f)
-
-
 def __init_current_haars_with_weight():
-    cache_path = "../dataset/train/haar_init.data"
+    cache_path = ROOT_DIR + normalize.TRAIN_DATA_INIT
     haars = __get_cache_obj(cache_path, __json_decode_sample)
     if haars is None:
-        train_data_dir = "../dataset/train/"
+        train_data_dir = ROOT_DIR + normalize.TRAIN_NORM_DIR
         # tuple list
         haars = []
         for f in os.listdir(train_data_dir):
             if f.startswith("norm_") and f.endswith(".png"):
                 haar = Haar(f, np.array(Image.open(train_data_dir + f, "r")))
                 haar.cal()
-                hi = __haar_index(f)
+                hi = re.split("[_.]", f)
                 if hi[1] == "p":
                     haars.append(Sample(f, haar[0:], PN.Positive, 0))
                 else:
@@ -199,8 +196,6 @@ def __find_weak_classifier(samples_f):
             min_err_curr_feature_err = c_err
             min_err_curr_feature_si = si
             min_err_curr_feature_symbol = symbol
-    print("__find_weak_classifier: min_err=" + str(min_err_curr_feature_err) +
-          ", min_err index=" + str(min_err_curr_feature_si))
     # (feature_sep, gt, err)
     return samples_f[min_err_curr_feature_si].feature, min_err_curr_feature_symbol, min_err_curr_feature_err
 
@@ -223,26 +218,56 @@ def __classify_true(sample, w_classifier):
             return sample.features[w_classifier.feature_index] <= w_classifier.feature_sep
 
 
-def train_entry():
-    # cal all dataset feature
-    haars = __init_current_haars_with_weight()
+def __thread_entry_weak_classify(haars, f_start, feature_counts, feature_counts_thread, result):
+    min_err_weak_classifier = None
+    for i in range(f_start, f_start + feature_counts_thread):
+        if i >= feature_counts:
+            break
+        # find weak classifier for each feature
+        # (feature, pn, weight)
+        samples_f = [SampleFeature(haars[j], i) for j in range(len(haars))]
+        (feature_sep, symbol, err) = __find_weak_classifier(samples_f)
+        if min_err_weak_classifier is None or err <= min_err_weak_classifier.err:
+            min_err_weak_classifier = WeakClassifier(i, feature_sep, symbol, err)
+        print("__thread_entry_weak_classify: thread=" + str(threading.current_thread()) +
+              ", i=" + str(i) +
+              ", f_start=" + str(f_start) +
+              " ~ f_start+feature_counts_thread=" + str(f_start + feature_counts_thread))
+    print(
+        "__thread_entry_weak_classify: thread" + str(threading.current_thread()) + ", " + str(min_err_weak_classifier))
+    result[0] = min_err_weak_classifier
+
+
+def __train_entry(haars, loop_t=1, thread_count=1):
     if haars is not None and len(haars) > 0:
         # features count
         feature_counts = len(haars[0].features)
+        # feature_counts = int(len(haars[0].features) / 100)
         best_weak_classifier = []
         # for every time
-        for t in range(200):
+        for t in range(loop_t):
+            print("train_entry: BEGIN===========Loop t=" + str(t))
             # find the best weak classifier
             min_err_weak_classifier = None
             # every feature
+            feature_counts_thread = np.math.ceil(feature_counts / thread_count)
+            threads = []
+            results_from_threads = []
             # for i in range(0, feature_counts, 16000):
-            for i in range(feature_counts):
-                # find weak classifier for each feature
-                # (feature, pn, weight)
-                samples_f = [SampleFeature(haars[j], i) for j in range(len(haars))]
-                (feature_sep, symbol, err) = __find_weak_classifier(samples_f)
-                if min_err_weak_classifier is None or err <= min_err_weak_classifier.err:
-                    min_err_weak_classifier = WeakClassifier(i, feature_sep, symbol, err)
+            for i in range(0, feature_counts, feature_counts_thread):
+                result = [None]
+                t = threading.Thread(target=__thread_entry_weak_classify,
+                                     args=(haars, i, feature_counts, feature_counts_thread, result))
+                threads.append(t)
+                results_from_threads.append(result)
+                t.start()
+            for i in range(len(threads)):
+                threads[i].join()
+                print("train_entry: thread " + str(i) + " join")
+            for res in results_from_threads:
+                if min_err_weak_classifier is None or res[0].err <= min_err_weak_classifier.err:
+                    min_err_weak_classifier = res[0]
+            print("train_entry: Loop t=" + str(t) + ", best_weak_classifier found, " + str(min_err_weak_classifier))
             best_weak_classifier.append(min_err_weak_classifier)
             # update alpha
             # (i, feature_sep, gt, err)
@@ -258,16 +283,21 @@ def train_entry():
                 total_weight += sample.weight
             for sample in haars:
                 sample.weight /= total_weight
-            print("train_entry: ===========Loop t=" + str(t) +
-                  ", beta=" + str(beta))
-            print("train_entry: ===========Loop t=" + str(t) +
-                  ", total_weight=" + str(total_weight))
-            print("train_entry: ===========Loop t=" + str(t) +
+            print("train_entry: END=============Loop t=" + str(t) +
+                  ", beta=" + str(beta) +
+                  ", total_weight=" + str(total_weight) +
                   ", min_err_weak_classifier=" + str(min_err_weak_classifier))
-        __cache_obj("../dataset/train/haar_classifier.model", best_weak_classifier, __json_encode_classifier)
+        __cache_obj(ROOT_DIR + normalize.TRAIN_MODEL,
+                    best_weak_classifier,
+                    __json_encode_classifier)
 
 
 if __name__ == '__main__':
+    # cal all dataset feature
+    print("__main__: init data begin")
+    haars = __init_current_haars_with_weight()
+    print("__main__: init data end")
+    # train
     print("__main__: train begin")
-    train_entry()
+    __train_entry(haars, 200, 8)
     print("__main__: train end")

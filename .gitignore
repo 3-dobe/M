@@ -1,4 +1,7 @@
 .idea
 venv
 *.pyc
+*.model
+*.data
+**/train/material
 **/train/origin
