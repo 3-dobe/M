@@ -1,5 +1,7 @@
 import numpy as np
 
+from utils import Log
+
 
 class Haar:
     def __init__(self, name, img, ratio=1):
@@ -25,8 +27,8 @@ class Haar:
         haar_features_4 = self.__cal_haar_4_features()
         haar_features_5 = self.__cal_haar_5_features()
         haar_features = haar_features_1 + haar_features_2 + haar_features_3 + haar_features_4 + haar_features_5
-        print("__extract:" + self.__name + " haar_features count " + str(len(haar_features)))
-        # print(haar_features)
+        Log.d("__extract:" + self.__name + " haar_features count " + str(len(haar_features)))
+        # Log.d(haar_features)
         return haar_features
 
     @staticmethod

@@ -6,6 +6,8 @@ from utils import *
 import os
 
 
+HAAR_SIZE = 24
+
 TRAIN_DIR = "dataset/train/"
 TRAIN_NORM_DIR = TRAIN_DIR + "norm/"
 TRAIN_MATERIAL_DIR = TRAIN_DIR + "material/"
@@ -14,6 +16,9 @@ TRAIN_ORIGIN_DIR = TRAIN_DIR + "origin/"
 TRAIN_DATA_INIT = TRAIN_DIR + "haar_init.data"
 TRAIN_MODEL = TRAIN_DIR + "haar_classifier.model"
 
+
+TEST_DIR = "dataset/test/"
+TEST_NORM_DIR = TEST_DIR + "norm/"
 
 def __init_origin(material_dir, origin_dir, tween=None, start=0):
     for f in os.listdir(material_dir):
@@ -27,7 +32,7 @@ def __normalize(origin_dir, train_dir, resample=Image.NEAREST):
     for f in os.listdir(origin_dir):
         f_g = re.split("[_.]", f)
         if len(f_g) == 3 and (f_g[0] == "p" or f_g[0] == "n") and f_g[2] == "png" and int(f_g[1]) >= 0:
-            n_img = ImgUtil.complete_scale_to_img(origin_dir + f, 24, None, resample)
+            n_img = ImgUtil.complete_scale_to_img(origin_dir + f, HAAR_SIZE, None, resample)
             n_img.save(train_dir + "norm_" + f, "png")
 
 
@@ -35,7 +40,7 @@ def normalize_big_n(big_img_path, crop_s):
     train = "train/"
     img_list = ImgUtil.crop_img_list(big_img_path, crop_s)
     for i in range(len(img_list)):
-        img_resized = img_list[i].resize((24, 24))
+        img_resized = img_list[i].resize((HAAR_SIZE, HAAR_SIZE))
         img_resized.save(train + "norm_n_" + str(i) + ".png", "png")
 
 

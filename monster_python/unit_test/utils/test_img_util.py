@@ -1,10 +1,10 @@
-from utils import ImgUtil
+from utils import ImgUtil, Log
 
 
 def test_crop_scale_to_array():
     img_path = "E:\\workspace\\chaopei\\m\\monster_python\\unit_test\\utils\\1.png"
     array = ImgUtil.complete_scale_to_array(img_path, 28)
-    print(array)
+    Log.d(array)
 
 
 def test_crop_scale_to_img():
