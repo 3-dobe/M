@@ -7,7 +7,7 @@ class Haar:
     def __init__(self, name, img, ratio=1):
         """ init with a data array of img, final feature window width is width(img)/ratio
 
-        :param img: img array
+        :param img: L img array
         """
         if img is None:
             raise Exception("Haar input img must be an NxN array")
